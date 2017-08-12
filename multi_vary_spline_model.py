@@ -175,29 +175,33 @@ class Multi_Vary_Line_Loss(nn.Module):
 		# 	print(line_mask.cpu())
 		# 	print(clf_line.cpu())
 		# Match the ground truth label
-		target_pos, point_masks = match_lines_sequence(point_pos_pred, target_pos, line_masks, point_masks)
+		target_pos, point_masks, clf_point = match_lines_sequence(point_pos_pred, target_pos, line_masks, point_masks, clf_point)
 		# print(type(target_pos))
 		# print(target_pos.cpu())
-		square_mse = torch.sum(torch.pow(point_pos_pred - target_pos, 2), dim=2)*point_masks
+		square_mse = torch.sum(torch.pow(point_pos_pred - target_pos, 2), dim=3).squeeze()*point_masks
 		# if config.debugging: print(square_mse.cpu())
 		mask_mse = torch.sum(square_mse) / (torch.sum(point_masks))
 		# print(square_mse.size())
 
-		#Classification loss
-		clf_point = clf_line.view(-1, 1)
+		#Line Classification loss
+		line_prob_pred = line_prob_pred.view(-1, 2)
+		clf_line = clf_line.view(-1, 1)
 		# if config.debugging: print(clf_point)
-		lg_sftmx = -torch.log(prob_pred)
+		lg_sftmx = -torch.log(line_prob_pred)
 		# if config.debugging: print(lg_sftmx)
-		clf_loss = torch.gather(lg_sftmx, 1, clf_point) * line_mask.view(-1,1)
+		line_clf_loss = torch.gather(lg_sftmx, 1, clf_line) * line_masks.view(-1,1)
 		# if config.debugging: print(clf_loss)
-		clf_loss = torch.sum(clf_loss)
-		clf_loss = clf_loss / (torch.sum(line_mask))
-		# clf_loss = lg_sftmx.select
+		line_clf_loss = torch.sum(line_clf_loss) / (torch.sum(line_masks))
 
-		return mask_mse, clf_loss
+		#Point Classification loss
+		point_prob_pred = point_prob_pred.view(-1, 2)
+		clf_point = clf_point.view(-1, 1)
+		lg_sftmx = -torch.log(point_prob_pred)
+		point_clf_loss = torch.gather(lg_sftmx, 1, clf_point)*point_masks.view(-1, 1)
+		point_clf_loss = torch.sum(point_clf_loss) / torch.sum(point_masks)
+		return mask_mse, line_clf_loss, point_clf_loss
 
-
-def match_lines(pos_pred, target_pos, line_mask):
+def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point):
 	"""
 	Match the prediction line and target line, and return the matched ground truth.
 	Using Hungarian Algorithm to optimize it
@@ -208,64 +212,28 @@ def match_lines(pos_pred, target_pos, line_mask):
 
 	"""
 	batch_size = pos_pred.size(0)
-	pos_t = torch.zeros(batch_size, config.max_line, config.max_point*config.n_dim).cuda()
+	pos_t = torch.zeros(batch_size, config.max_line, config.max_point, config.n_dim).cuda()
+	pos_m = torch.zeros(batch_size, config.max_line, config.max_point).cuda()
+	pos_c = torch.zeros(batch_size, config.max_line, config.max_point).cuda()
 
 	for i_batch in range(batch_size):
 		i_n_line = int(line_mask[i_batch].sum().data[0])
 		if i_n_line == 1:
 			pos_t[i_batch] = target_pos[i_batch].data
+			pos_m[i_batch] = point_masks[i_batch].data
+			pos_c[i_batch] = clf_point[i_batch].data
 			continue
 		if config.debugging: print(i_n_line)
-		i_pos_pred = pos_pred[i_batch].data.cpu()[:int(i_n_line), :]
-		i_pos_target = target_pos[i_batch].data.cpu()[:int(i_n_line), :]
+		i_pos_pred = pos_pred[i_batch].data.cpu()[:int(i_n_line)]
+		i_pos_target = target_pos[i_batch].data.cpu()[:int(i_n_line)]
 		if config.debugging:
 			print(i_pos_pred)
 			print(i_pos_target)
 			print(line_mask[i_batch])
-		i_pos_pred = i_pos_pred.view(1, i_n_line, config.max_point*config.n_dim).expand(i_n_line, i_n_line, config.max_point*config.n_dim)
-		i_pos_target = i_pos_target.view(i_n_line, 1, config.max_point*config.n_dim).expand(i_n_line, i_n_line, config.max_point*config.n_dim)
-		Euclidean_m = i_pos_target - i_pos_pred
-		Euclidean_m = torch.sum(Euclidean_m*Euclidean_m, 2).squeeze().t().numpy()
-		if config.debugging:
-			print(Euclidean_m)
-		row_ind, col_ind = linear_sum_assignment(Euclidean_m)
-		# In this case, row_ind is the same as np.arrange(Eiclidean_m.shape(0))
-		if config.debugging: print(row_ind, col_ind)
-		col_ind = torch.from_numpy(col_ind).cuda().long()
-		tmp_target = target_pos[i_batch][col_ind]
-		pos_t[i_batch, :i_n_line, :] = tmp_target.data
-		if config.debugging:
-			print(f"After, pos target is {pos_t}")
-
-	return Variable(pos_t, requires_grad = False)
-
-def match_lines_sequence(pos_pred, target_pos, line_mask):
-	"""
-	Match the prediction line and target line, and return the matched ground truth.
-	Using Hungarian Algorithm to optimize it
-	:param pos_pred:
-	:param target_pos:
-	:param line_mask:
-	:return:
-
-	"""
-	batch_size = pos_pred.size(0)
-	pos_t = torch.zeros(batch_size, config.max_line, config.max_point*config.n_dim).cuda()
-
-	for i_batch in range(batch_size):
-		i_n_line = int(line_mask[i_batch].sum().data[0])
-		if i_n_line == 1:
-			pos_t[i_batch] = target_pos[i_batch].data
-			continue
-		if config.debugging: print(i_n_line)
-		i_pos_pred = pos_pred[i_batch].data.cpu()[:int(i_n_line), :]
-		i_pos_target = target_pos[i_batch].data.cpu()[:int(i_n_line), :]
-		if config.debugging:
-			print(i_pos_pred)
-			print(i_pos_target)
-			print(line_mask[i_batch])
-		i_pos_pred = i_pos_pred.view(1, i_n_line, config.max_point*config.n_dim).expand(i_n_line, i_n_line, config.max_point*config.n_dim)
-		i_pos_target = i_pos_target.view(i_n_line, 1, config.max_point*config.n_dim).expand(i_n_line, i_n_line, config.max_point*config.n_dim)
+		i_pos_pred = i_pos_pred.view(1, i_n_line, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
+		i_pos_target = i_pos_target.view(i_n_line, 1, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
+		# Mask the i_pos_pred
+		
 		Euclidean_m = i_pos_target - i_pos_pred
 		Euclidean_m = torch.sum(Euclidean_m*Euclidean_m, 2).squeeze().t().numpy()
 		if config.debugging:
