@@ -128,7 +128,8 @@ class Multi_Vary_Line_Model_v1(nn.Module):
 		line_prob_output = F.softmax(line_prob_output)
 		point_prob_output = point_prob_output.view(-1, 2)
 		point_prob_output = F.softmax(point_prob_output)
-
+		line_prob_output = line_prob_output.view(batch_size, n_lines, 2)
+		point_prob_output = point_prob_output.view(batch_size, n_lines, config.max_point, 2)
 		if self.vis_attention:
 			return point_pos_output, point_prob_output, line_prob_output, attention_map
 		return point_pos_output, point_prob_output, line_prob_output
@@ -168,12 +169,15 @@ class Multi_Vary_Line_Loss(nn.Module):
 		:param clf_point: [batch_size, n_line, n_point]
 		:return:
 		'''
-		# if config.debugging:
-		# 	print(pos_pred.cpu())
-		# 	print(prob_pred.cpu())
-		# 	print(target_pos.cpu())
-		# 	print(line_mask.cpu())
-		# 	print(clf_line.cpu())
+		if config.debugging:
+			print(point_pos_pred)
+			print(point_prob_pred)
+			print(line_prob_pred)
+			print(target_pos)
+			print(line_masks)
+			print(clf_line)
+			print(point_masks)
+			print(clf_point)
 		# Match the ground truth label
 		target_pos, point_masks, clf_point = match_lines_sequence(point_pos_pred, target_pos, line_masks, point_masks, clf_point)
 		# print(type(target_pos))
@@ -227,19 +231,26 @@ def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point
 		if config.debugging: print(i_n_line)
 		i_pos_pred = pos_pred[i_batch].data.cpu()[:int(i_n_line)]
 		i_pos_target = target_pos[i_batch].data.cpu()[:int(i_n_line)]
+		i_point_mask = point_masks[i_batch].data.cpu()[:int(i_n_line)]
 		if config.debugging:
 			print(i_pos_pred)
 			print(i_pos_target)
 			print(line_mask[i_batch])
-		i_pos_pred = i_pos_pred.view(1, i_n_line, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
-		i_pos_target = i_pos_target.view(i_n_line, 1, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
-		# Mask the i_pos_pred
-		i_point_mask = point_masks[i_batch].data.cpu()[:int(i_n_line)]
-		i_point_mask = i_point_mask.view(i_n_line, 1, config.max_point, 1).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
-		i_pos_pred = i_pos_pred * i_point_mask
-		Euclidean_m = i_pos_target - i_pos_pred
-		Euclidean_m = Euclidean_m * Euclidean_m
-		Euclidean_m = torch.sum(torch.sum(Euclidean_m, 3).squeeze(), 2).squeeze().t().numpy()
+
+		# Just enumearte to get the Euclidean mask, because of low computational cost
+		Euclidean_m = np.zeros((i_n_line, i_n_line))
+		for i_pred in range(i_n_line):
+			for i_target in range(i_n_line):
+				p = i_pos_pred[i_pred]
+				t = i_pos_target[i_target]
+				if config.debugging: print(f"Before Mask p: {p}")
+				n_point = torch.sum(i_point_mask[i_target])
+
+				p = p * i_point_mask[i_target].unsqueeze(1).expand_as(p)
+				if config.debugging: print(f"Masked P: {p}")
+				dis = p - t
+				dis = torch.sum(dis*dis) / n_point
+				Euclidean_m[i_pred, i_target] = dis
 		if config.debugging:
 			print(Euclidean_m)
 		row_ind, col_ind = linear_sum_assignment(Euclidean_m)
@@ -252,6 +263,8 @@ def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point
 		pos_c[i_batch, :i_n_line] = clf_point[i_batch][col_ind].data
 		if config.debugging:
 			print(f"After, pos target is {pos_t}")
+			print(f"After, pos mask is {pos_m}")
+			print(f"After, pos clf is {pos_c}")
 
 	return Variable(pos_t, requires_grad = False), Variable(pos_m, requires_grad=False), Variable(pos_c, requires_grad=False)
 
