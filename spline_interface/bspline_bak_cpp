@@ -1,0 +1,310 @@
+#include "bspline.h"
+using namespace GuidedProjection;
+using namespace OpenMesh;
+using namespace std;
+
+BSpline::BSpline(PolyMesh *_m, Vertices _vhs, int _order)
+{
+    Init(_m, _vhs, _order);
+}
+
+void BSpline::Init(PolyMesh *_m, Vertices _vhs, int _order)
+{
+    mesh_ = _m;
+    vhs_ = _vhs;
+    p_ = _order;//degree
+    initialize();
+}
+
+void BSpline::initialize_C1_dual(PolyMesh *_m, Vertices _vhs, int n)
+{
+    // n is the number of parameter intervals, not n_, which is the number of geometric interval
+    a_ = 0.;
+    b_ = 1.;
+    vhs_ = _vhs;
+    n_ = vhs_.size() - 1; // number of geometric intervals instead of points
+    p_ = 4;	// fouth order for dual
+    m_ = p_ + n_ + 1;
+    mesh_ = _m;
+    // set points
+    for(const auto & v : _vhs)
+    {
+        P_.push_back(mesh_->point(v));
+    }
+    // set knot vector U_
+    for (int i=0; i<p_+1; ++i) U_.push_back(a_);
+    double d = (b_ - a_) / n;
+    // WARNING: check if this is valid for non-cubic splines
+    for (int i=1.; i<(m_ - 2*p_); ++i)
+    {
+        U_.push_back(a_ + d*i);
+        U_.push_back(a_ + d*i);
+        U_.push_back(a_ + d*i);
+    }
+    for (int i=0; i<p_+1; ++i) U_.push_back(b_);
+}
+
+int BSpline::FindSpan(double u)
+{
+    // n_ is the span index
+    return FindSpan(u, n_, p_, &U_[0]);
+}
+
+// find the index id of knot which is right on the left of u
+// that is, u lie in the knot inteval [U[id], U[id+1]]
+// p  is degree,  n+ 1: # control points
+// U is input , knot vector
+int BSpline::FindSpan(double u, int n, int p, double *U)
+{
+    if (u == U[n+1]) return n;
+    int low = p;
+    int high = n+1;
+    int mid = (low+high)/2;
+    while (u < U[mid] || u >= U[mid+1])
+    {
+        if (u<U[mid]) high = mid;
+        else low = mid;
+        mid = (low+high)/2;
+    }
+    return mid;
+}
+
+// B spline basis function  which are nonzero at u
+// i is given  by FindSpan
+vector<double> BSpline::BasisFuns(double u, int i)
+{
+    return BasisFuns(u, i, p_, &U_[0]);
+}
+
+Points BSpline::points(int n_samples)
+{
+    Points ps;
+    ps.reserve(n_samples);
+    double u = 0., du = (double)1./(n_samples-1);
+    for(int i=0; i<n_samples; ++i, u+=du)
+        ps.push_back(point(u));
+    return ps;
+}
+
+// B spline basis function  which are nonzero at u
+vector<double> BSpline::BasisFuns(double u, int i, int p, double *U)
+{
+    vector<double> N(p+1, 0.), left(p+1, 0.), right(p+1, 0.);
+    N[0] = 1.0;
+    for(int j=1; j<=p; ++j)
+    {
+        left[j] = u-U[i+1-j];
+        right[j] = U[i+j]-u;
+        double saved = 0.0;
+        for(int r=0; r<j; ++r)
+        {
+            double temp = N[r]/(right[r+1]+left[j-r]);
+            N[r] = saved + right[r+1]*temp;
+            saved = left[j-r]*temp;
+        }
+        N[j] = saved;
+    }
+    return N;
+}
+
+vector<double> BSpline::BasisFunsPrev(double u, int i)
+{
+    vector<double> Uprev;
+    Uprev.insert(Uprev.end(), U_.begin()+i+1-p_, U_.begin()+i+p_-1+1);
+    Uprev.erase(Uprev.begin()+p_-1);
+    return BasisFuns(u, p_-2, p_-1, &Uprev[0]);
+}
+
+vector<double> BSpline::BasisFunsNext(double u, int i)
+{
+    vector<double> Unext;
+    Unext.insert(Unext.end(), U_.begin()+i+1-p_+1, U_.begin()+i+p_+1);
+    Unext.erase(Unext.begin()+p_-1);
+    return BasisFuns(u, p_-2, p_-1, &Unext[0]);
+}
+
+std::vector<double> BSpline::BasisFunsOscPrev(double u, int i)
+{
+    vector<double> Uoscprev;
+    Uoscprev.insert(Uoscprev.end(), U_.begin()+i+1-p_, U_.begin()+i+p_+1-2);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);  // which one is correct?
+    return BasisFuns(u, p_-3, p_-2, &Uoscprev[0]);
+}
+
+std::vector<double> BSpline::BasisFunsOscMiddle(double u, int i)
+{
+    vector<double> Uoscprev;
+    Uoscprev.insert(Uoscprev.end(), U_.begin()+i+1-p_+1, U_.begin()+i+p_+1-2+1);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);  // which one is correct?
+    return BasisFuns(u, p_-3, p_-2, &Uoscprev[0]);
+}
+
+std::vector<double> BSpline::BasisFunsOscNext(double u, int i)
+{
+    vector<double> Uoscprev;
+    Uoscprev.insert(Uoscprev.end(), U_.begin()+i+1-p_+2, U_.begin()+i+p_+1-2+2);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);
+    Uoscprev.erase(Uoscprev.begin()+p_-2);  // which one is correct?
+    return BasisFuns(u, p_-3, p_-2, &Uoscprev[0]);
+}
+
+Vec3d BSpline::point(double u)
+{
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFuns(u, span);
+    for(int i=0; i<p_+1; ++i) p += N[i]*P_[span-p_+i];
+    return p;
+}
+
+Vec3d BSpline::tangent(double u)
+{
+    return (TangentPointNext(u) - TangentPointPrev(u)).normalized();
+}
+
+Points BSpline::tangents(int n_samples)
+{
+    Points ts;
+    ts.reserve(n_samples);
+    double u = 0., du = (double)1./(n_samples-1);
+    for(int i=0; i<n_samples; ++i, u+=du)
+        ts.push_back(tangent(u));
+    return ts;
+}
+
+Vec3d BSpline::TangentPointPrev(double u)
+{
+    if( u==a_ ) return P_.front();
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsPrev(u, span);
+    for(int i=0; i<p_; ++i) p += N[i]*P_[span-p_+i];
+    return p;
+}
+
+Vec3d BSpline::TangentPointNext(double u)
+{
+    if( u==b_ ) return P_.back();
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsNext(u, span);
+    for(int i=0; i<p_; ++i) p += N[i]*P_[span-p_+i+1];
+    return p;
+}
+
+Vec3d BSpline::OsculatingPointPrev(double u)
+{
+    if( u==a_ ) return P_.front();
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscPrev(u, span);
+    for(int i=0; i<p_-1; ++i) p += N[i]*P_[span-p_+i];
+    return p;
+}
+
+Vec3d BSpline::OsculatingPointMiddle(double u)
+{
+    if( u==a_ ) return P_.front();
+    else if( u==b_ ) return P_.back();
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscMiddle(u, span);
+    for(int i=0; i<p_-1; ++i) p += N[i]*P_[span-p_+i+1];
+    return p;
+}
+
+Vec3d BSpline::OsculatingPointNext(double u)
+{
+    if( u==b_ ) return P_.back();
+    Vec3d p(0.,0.,0.);
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscNext(u, span);
+    for(int i=0; i<p_-1; ++i) p += N[i]*P_[span-p_+i+2];
+    return p;
+}
+
+vector<pair<VertexHandle, double> > BSpline::LinearRelationCurrent(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFuns(u, span);
+    for(int i=0; i<p_+1; ++i) lr.push_back(make_pair(vhs_[span-p_+i], N[i]));
+    return lr;
+}
+
+vector<pair<VertexHandle, double> > BSpline::LinearRelationPrev(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsPrev(u, span);
+    for(int i=0; i<p_; ++i) lr.push_back(make_pair(vhs_[span-p_+i], N[i]));
+    return lr;
+}
+
+vector<pair<VertexHandle, double> > BSpline::LinearRelationNext(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsNext(u, span);
+    for(int i=0; i<p_; ++i) lr.push_back(make_pair(vhs_[span-p_+i+1], N[i]));
+    return lr;
+}
+
+std::vector<std::pair<VertexHandle, double> > BSpline::LinearRelationOscPrev(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscPrev(u, span);
+    for(int i=0; i<p_-1; ++i) lr.push_back(make_pair(vhs_[span-p_+i], N[i]));
+    return lr;
+}
+
+std::vector<std::pair<VertexHandle, double> > BSpline::LinearRelationOscMiddle(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscMiddle(u, span);
+    for(int i=0; i<p_-1; ++i) lr.push_back(make_pair(vhs_[span-p_+i+1], N[i]));
+    return lr;
+}
+
+std::vector<std::pair<VertexHandle, double> > BSpline::LinearRelationOscNext(double u)
+{
+    vector<pair<VertexHandle, double> > lr;
+    int span = FindSpan(u);
+    vector<double> N = BasisFunsOscNext(u, span);
+    for(int i=0; i<p_-1; ++i) lr.push_back(make_pair(vhs_[span-p_+i+2], N[i]));
+    return lr;
+}
+
+void BSpline::GetKnots(vector<double>& knots)
+{
+	knots = U_;
+}
+
+void BSpline::update_control_points()
+{
+    P_.clear();
+    P_.reserve(vhs_.size());
+    for( const auto & v : vhs_)
+    {
+        P_.push_back(mesh_->point(v));
+    }
+}
+
+void BSpline::initialize()
+{
+    a_ = 0.;
+    b_ = 1.;
+    n_ = vhs_.size() - 1; // number of intervals instead of points
+    m_ = p_ + n_ + 1;
+    // set control points
+    update_control_points();
+    // set knot vector U_
+    for (int i=0; i<p_+1; ++i) U_.push_back(a_);
+    double d = (b_ - a_) / (m_ - 2*p_);
+    for (int i=1.; i<(m_ - 2*p_); ++i) U_.push_back(a_ + d*i);
+    for (int i=0; i<p_+1; ++i) U_.push_back(b_);
+}

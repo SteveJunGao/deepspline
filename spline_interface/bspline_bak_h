@@ -1,0 +1,74 @@
+#ifndef BSPLINE_H
+#define BSPLINE_H
+#include "polymesh.h"
+
+namespace GuidedProjection
+{
+
+/** This is a well written short class for general B-Splines
+ *
+ * It returns not only specific values of the final curve
+ * More importantly, it could generate linear dependencies between auxiliary vertices with the control vertices
+ *
+ * Drawbacks: it's always related to the OpenMesh data structure.
+ * It would be better to have a standalone template based version
+ *
+ * Possibly a programming exercise: implement a full modern template and C++11 based version for BSpline
+ * We probably could also try Haskell to perform the same functionality?
+ * - Can we do it based on blossoming or pyramid algorithm instead of the current implementation?
+ */
+class BSpline
+{
+public:
+    BSpline(){}
+    BSpline(PolyMesh *_m, std::vector<OpenMesh::VertexHandle> _vhs, int order = 3);
+    void Init(PolyMesh *_m, std::vector<OpenMesh::VertexHandle> _vhs, int order = 3);
+
+    int FindSpan(double u);//??
+    std::vector<double> BasisFuns(double u, int i);
+    OpenMesh::Vec3d point(double u);
+    Points points(int n_samples);
+    OpenMesh::Vec3d tangent(double u);
+    Points tangents(int n_samples);
+    OpenMesh::Vec3d TangentPointPrev(double u);
+    OpenMesh::Vec3d TangentPointNext(double u);
+    OpenMesh::Vec3d OsculatingPointPrev(double u);
+    OpenMesh::Vec3d OsculatingPointMiddle(double u);
+    OpenMesh::Vec3d OsculatingPointNext(double u);
+    // current point
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationCurrent(double u);
+    // tangent line
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationPrev(double u);
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationNext(double u);
+    // osculating plane
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationOscPrev(double u);
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationOscMiddle(double u);
+    std::vector<std::pair<OpenMesh::VertexHandle, double> > LinearRelationOscNext(double u);
+
+    void initialize_C1_dual(PolyMesh *_m, std::vector<OpenMesh::VertexHandle> _vhs, int n);
+    void update_control_points();
+
+	void GetKnots(vector<double>& knots);
+protected:
+    void initialize();
+
+private:
+    int p_; //order: for cubic / quadratic
+    PolyMesh *mesh_;
+    int n_; // number of intervals ( #control_points - 1 )
+    int m_; // ( #nodes - 1 )
+    Vertices vhs_;
+    Points P_;
+    vector<double> U_;
+    double a_;  //begin of parametrization
+    double b_;  //end of parametrization
+    vector<double> BasisFuns(double u, int i, int p, double *U);
+    vector<double> BasisFunsPrev(double u, int i);
+    vector<double> BasisFunsNext(double u, int i);
+    vector<double> BasisFunsOscPrev(double u, int i);
+    vector<double> BasisFunsOscMiddle(double u, int i);
+    vector<double> BasisFunsOscNext(double u, int i);
+    int FindSpan(double u, int n, int p, double *U);
+};
+}   //namespace GuidedProjection
+#endif // BSPLINE_H
