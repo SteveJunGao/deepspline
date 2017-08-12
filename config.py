@@ -18,7 +18,7 @@ reader_verbose = False
 # Used for training
 manual_seed = 1
 train_part = 0.7
-train_batch_size = 32
+train_batch_size = 2
 continue_train = False
 continue_model_name = './multi_spline_cc_pretrain_VGG_more_data_sigmoid/chkt_1'
 lr = 1e-4
@@ -28,7 +28,7 @@ fix_pretrained = False
 checkpoint_path = './multi_spline_cc_pretrain_VGG_more_data_sigmoid_continue'
 log_file_path = './log/'
 log_file_name = 'multi_spline_cc_pretrain_VGG_more_data_sigmoid_continue'
-debugging = False
+debugging = True
 clf_weight = 0.1
 fix_img_feature = False
 

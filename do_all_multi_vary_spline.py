@@ -68,13 +68,16 @@ def train(epoch):
 	net.train()
 	train_loss = 0
 	cul_mse_loss = 0
-	cul_clf_loss = 0
+	cul_point_clf_loss = 0
+	cul_spline_clf_loss = 0
 	n_batch = 0
 	for batch_idx, (inputs, labels, line_masks, clf_line, point_masks, clf_point) in enumerate(trainloader):
 		inputs = inputs.float().cuda()
 		labels = labels.float().cuda()
 		line_masks = line_masks.float().cuda()
 		clf_line = clf_line.long().cuda()
+		point_masks = point_masks.float().cuda()
+		clf_point = clf_point.long().cuda()
 		inputs = Variable(inputs)
 		labels = Variable(labels, requires_grad=False)
 		line_masks = Variable(line_masks, requires_grad=False)
@@ -86,21 +89,21 @@ def train(epoch):
 		point_pos_pred, point_prob_pred, line_prob_pred= net(inputs, config.max_line)
 		mse_loss, point_clf_loss, spline_clf_loss = criterion(point_pos_pred, point_prob_pred, line_prob_pred,
 		                                                      labels, line_masks, clf_line, point_masks, clf_point)
-		loss = mse_loss + config.clf_weight*clf_loss
+		loss = mse_loss + config.clf_weight*(point_clf_loss+spline_clf_loss)
 		loss.backward()
 		optimizer.step()
 		train_loss += loss.data[0]
 		cul_mse_loss += mse_loss.data[0]
-		cul_clf_loss += clf_loss.data[0]
+		cul_point_clf_loss += point_clf_loss.data[0]
+		cul_spline_clf_loss += spline_clf_loss.data[0]
 		n_batch += 1
-		progress_bar(batch_idx, len(trainloader), 'Loss: %.5f  %.5f %.5f %.5f %.5f %.5f'
-			% (mse_loss.data[0], clf_loss.data[0], loss.data[0],
-			   cul_mse_loss/(batch_idx+1), cul_clf_loss/(batch_idx+1), train_loss/(batch_idx+1)))
+		progress_bar(batch_idx, len(trainloader), 'Loss: %.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f'
+			% (mse_loss.data[0], point_clf_loss.data[0], spline_clf_loss.data[0], loss.data[0],
+			   cul_mse_loss/(batch_idx+1), cul_point_clf_loss/(batch_idx+1), cul_spline_clf_loss / (batch_idx+1), train_loss/(batch_idx+1)))
 		# if config.debugging and (batch_idx+1)%config.debugging_iter == 0:
 		# 	sys.exit(0)
-	my_print('Epoch: %d Training: Loss: %.5f  %.5f %.5f'
-			% (epoch, cul_mse_loss/n_batch, cul_clf_loss/n_batch, train_loss/n_batch))
-	net.ss_prob += 0.1
+	my_print('Epoch: %d Training: Loss: %.5f %.5f %.5f %.5f'
+			% (epoch, cul_mse_loss/n_batch, cul_point_clf_loss/n_batch, cul_spline_clf_loss/n_batch, train_loss/n_batch))
 
 def test(epoch):
 	net.eval()
@@ -108,38 +111,43 @@ def test(epoch):
 	test_label = []
 	test_loss = 0.0
 	cul_mse_loss = 0
-	cul_clf_loss = 0
+	cul_point_clf_loss = 0
+	cul_spline_clf_loss = 0
 	loss = 0
 	n_batch = 0
 
-	for batch_idx, (inputs, labels, line_masks, clf_line) in enumerate(testloader):
+	for batch_idx, (inputs, labels, line_masks, clf_line, point_masks, clf_point) in enumerate(testloader):
 		test_label.append(labels)
 		inputs = inputs.float().cuda()
 		labels = labels.float().cuda()
 		line_masks = line_masks.float().cuda()
 		clf_line = clf_line.long().cuda()
+		point_masks = point_masks.float().cuda()
+		clf_point = clf_point.long().cuda()
 		inputs = Variable(inputs)
 		labels = Variable(labels, requires_grad=False)
 		line_masks = Variable(line_masks, requires_grad=False)
 		clf_line = Variable(clf_line, requires_grad=False)
+		point_masks = Variable(point_masks, requires_grad = False)
+		clf_point = Variable(clf_point, requires_grad = False)
 
-		pred_pos, pred_prob = net(inputs, config.max_line, labels, clf_line)
-		test_predict.append((pred_pos.cpu().data, pred_prob.cpu().data))
-		# test_predict.append((pred_pos.cpu().data, pred_prob.cpu().data))
-		mse_loss, clf_loss = criterion(pred_pos, pred_prob, labels, line_masks, clf_line)
-		loss = mse_loss + config.clf_weight*clf_loss
+		point_pos_pred, point_prob_pred, line_prob_pred = net(inputs, config.max_line)
+		mse_loss, point_clf_loss, spline_clf_loss = criterion(point_pos_pred, point_prob_pred, line_prob_pred,
+		                                                      labels, line_masks, clf_line, point_masks, clf_point)
+		loss = mse_loss + config.clf_weight * (point_clf_loss+ spline_clf_loss)
 		test_loss += loss.data[0]
 		cul_mse_loss += mse_loss.data[0]
-		cul_clf_loss += clf_loss.data[0]
+		cul_point_clf_loss += point_clf_loss.data[0]
+		cul_spline_clf_loss += spline_clf_loss.data[0]
 		n_batch += 1
-		progress_bar(batch_idx, len(testloader), 'Loss: %.5f %.5f %.5f %.5f %.5f %.5f'
-		             % (mse_loss.data[0], clf_loss.data[0], loss.data[0],
-		                cul_mse_loss / (batch_idx + 1), cul_clf_loss / (batch_idx + 1), test_loss/(batch_idx+1)))
+		progress_bar(batch_idx, len(testloader), 'Loss: %.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f'
+		             % (mse_loss.data[0], point_clf_loss.data[0], spline_clf_loss.data[0], loss.data[0],
+		                cul_mse_loss / (batch_idx + 1), cul_point_clf_loss / (batch_idx + 1),
+		                cul_spline_clf_loss / (batch_idx + 1), test_loss / (batch_idx + 1)))
 
-
-	my_print('Epoch: %d Testing:Loss: %.5f  %.5f %.5f %.5f'
-			% (epoch, cul_mse_loss/n_batch, cul_clf_loss/n_batch, loss.data[0], test_loss / n_batch))
-
+	my_print('Epoch: %d Testing: Loss: %.5f %.5f %.5f %.5f'
+	         % (epoch, cul_mse_loss / n_batch, cul_point_clf_loss / n_batch, cul_spline_clf_loss / n_batch,
+	            test_loss / n_batch))
 	print('Saving..')
 	state = {
 		'net': net,

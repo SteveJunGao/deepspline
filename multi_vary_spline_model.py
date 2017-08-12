@@ -180,7 +180,7 @@ class Multi_Vary_Line_Loss(nn.Module):
 		# print(target_pos.cpu())
 		square_mse = torch.sum(torch.pow(point_pos_pred - target_pos, 2), dim=3).squeeze()*point_masks
 		# if config.debugging: print(square_mse.cpu())
-		mask_mse = torch.sum(square_mse) / (torch.sum(point_masks))
+		mask_mse = torch.sum(square_mse) / (torch.sum(point_masks)) * 5
 		# print(square_mse.size())
 
 		#Line Classification loss
@@ -214,10 +214,11 @@ def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point
 	batch_size = pos_pred.size(0)
 	pos_t = torch.zeros(batch_size, config.max_line, config.max_point, config.n_dim).cuda()
 	pos_m = torch.zeros(batch_size, config.max_line, config.max_point).cuda()
-	pos_c = torch.zeros(batch_size, config.max_line, config.max_point).cuda()
+	pos_c = torch.zeros(batch_size, config.max_line, config.max_point).long().cuda()
 
 	for i_batch in range(batch_size):
 		i_n_line = int(line_mask[i_batch].sum().data[0])
+		if config.debugging: print(f"Number of Line = {i_n_line}")
 		if i_n_line == 1:
 			pos_t[i_batch] = target_pos[i_batch].data
 			pos_m[i_batch] = point_masks[i_batch].data
@@ -233,9 +234,12 @@ def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point
 		i_pos_pred = i_pos_pred.view(1, i_n_line, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
 		i_pos_target = i_pos_target.view(i_n_line, 1, config.max_point, config.n_dim).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
 		# Mask the i_pos_pred
-		
+		i_point_mask = point_masks[i_batch].data.cpu()[:int(i_n_line)]
+		i_point_mask = i_point_mask.view(i_n_line, 1, config.max_point, 1).expand(i_n_line, i_n_line, config.max_point, config.n_dim)
+		i_pos_pred = i_pos_pred * i_point_mask
 		Euclidean_m = i_pos_target - i_pos_pred
-		Euclidean_m = torch.sum(Euclidean_m*Euclidean_m, 2).squeeze().t().numpy()
+		Euclidean_m = Euclidean_m * Euclidean_m
+		Euclidean_m = torch.sum(torch.sum(Euclidean_m, 3).squeeze(), 2).squeeze().t().numpy()
 		if config.debugging:
 			print(Euclidean_m)
 		row_ind, col_ind = linear_sum_assignment(Euclidean_m)
@@ -243,9 +247,11 @@ def match_lines_sequence(pos_pred, target_pos, line_mask, point_masks, clf_point
 		if config.debugging: print(row_ind, col_ind)
 		col_ind = torch.from_numpy(col_ind).cuda().long()
 		tmp_target = target_pos[i_batch][col_ind]
-		pos_t[i_batch, :i_n_line, :] = tmp_target.data
+		pos_t[i_batch, :i_n_line] = tmp_target.data
+		pos_m[i_batch, :i_n_line] = point_masks[i_batch][col_ind].data
+		pos_c[i_batch, :i_n_line] = clf_point[i_batch][col_ind].data
 		if config.debugging:
 			print(f"After, pos target is {pos_t}")
 
-	return Variable(pos_t, requires_grad = False)
+	return Variable(pos_t, requires_grad = False), Variable(pos_m, requires_grad=False), Variable(pos_c, requires_grad=False)
 
