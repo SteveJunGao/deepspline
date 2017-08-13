@@ -41,7 +41,7 @@ if config.continue_train:
 	for p in net.img_feature.parameters():
 		p.requires_grad = True
 else:
-	net = Multi_Vary_Line_Model_v1(fix_pretrained = config.fix_pretrained, no_attention = True)
+	net = Multi_Vary_Line_Model_v1(fix_pretrained = config.fix_pretrained, no_attention = False)
 	# net = Multi_Line_Model_on_going_2(fix_pretrained = config.fix_pretrained)
 	# net = ResNet34(config.n_point*config.n_dim)
 	# print(net)
@@ -53,9 +53,10 @@ if config.fix_img_feature:
 	optimizer = optim.SGD([
 		{'params': net.hidden_predion.parameters()},
 		{'params': net.attention.parameters()},
-		{'params': net.gru.parameters()},
-		{'params': net.predict_linear1.parameters()},
-		{'params': net.predict_linear2.parameters()},
+		{'params': net.spline_gru.parameters()},
+		{'params': net.point_gru.parameters()},
+		{'params': net.line_pred.parameters()},
+		{'params': net.point_pred.parameters()},
 		],
         lr = config.lr,
         weight_decay = config.weight_decay
@@ -87,9 +88,9 @@ def train(epoch):
 
 		optimizer.zero_grad()
 		point_pos_pred, point_prob_pred, line_prob_pred= net(inputs, config.max_line)
-		mse_loss, point_clf_loss, spline_clf_loss = criterion(point_pos_pred, point_prob_pred, line_prob_pred,
+		mse_loss, spline_clf_loss, point_clf_loss = criterion(point_pos_pred, point_prob_pred, line_prob_pred,
 		                                                      labels, line_masks, clf_line, point_masks, clf_point)
-		loss = mse_loss + config.clf_weight*(point_clf_loss+spline_clf_loss)
+		loss = mse_loss + config.clf_weight*(2*point_clf_loss+spline_clf_loss)
 		loss.backward()
 		optimizer.step()
 		train_loss += loss.data[0]
@@ -135,6 +136,7 @@ def test(epoch):
 		mse_loss, point_clf_loss, spline_clf_loss = criterion(point_pos_pred, point_prob_pred, line_prob_pred,
 		                                                      labels, line_masks, clf_line, point_masks, clf_point)
 		loss = mse_loss + config.clf_weight * (point_clf_loss+ spline_clf_loss)
+		test_predict.append((point_pos_pred.cpu().data, point_prob_pred.cpu().data, line_prob_pred.cpu().data))
 		test_loss += loss.data[0]
 		cul_mse_loss += mse_loss.data[0]
 		cul_point_clf_loss += point_clf_loss.data[0]
