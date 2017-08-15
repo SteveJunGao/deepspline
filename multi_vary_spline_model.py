@@ -28,7 +28,9 @@ class Multi_Vary_Line_Model_v1(nn.Module):
 	def __init__(self, ss_prob = 0.1, fix_pretrained=False, vis_attention=False, no_attention = False):
 		super(Multi_Vary_Line_Model_v1, self).__init__()
 		vgg = th_mdl.vgg16(pretrained = True)
-		self.img_feature = vgg.features
+		print(vgg.features)
+		self.img_feature = nn.Sequential(*list(vgg.features.children())[:-1])
+		print(self.img_feature)
 		# self.img_feature = ResNet34()
 		self.vis_attention = vis_attention
 		self.no_attention = no_attention
@@ -40,11 +42,12 @@ class Multi_Vary_Line_Model_v1(nn.Module):
 		self.img_feature_size = 512
 		self.spline_hidden_size = 512
 		self.point_hidden_size = 512
+		self.n_spline_rnn_layers = 1
 
 		self.hidden_predion = MyModuleList(self.hidden_pred_list(self.img_feature_size, self.spline_hidden_size))
 		self.attention = MyModuleList(self.attention_list(self.img_feature_size+self.spline_hidden_size)) # Generate the output attention map
-
-		self.spline_gru = nn.GRU(input_size = self.img_feature_size, hidden_size = self.spline_hidden_size)
+		self.spline_rep = MyModuleList(self.spline_to_point(self.spline_hidden_size, self.point_hidden_size)) # transform the hidden vector from spline rnn into point rnn.
+		self.spline_gru = nn.GRU(input_size = self.img_feature_size, hidden_size = self.spline_hidden_size, num_layers = self.n_spline_rnn_layers)
 		self.point_gru = nn.GRU(input_size = self.spline_hidden_size, hidden_size = self.point_hidden_size)
 		self.point_pred = nn.Linear(self.point_hidden_size, 4) # Predict the point position and point stop probability
 		self.line_pred = nn.Linear(self.spline_hidden_size, 2) # Predict spline stop probability
@@ -62,7 +65,16 @@ class Multi_Vary_Line_Model_v1(nn.Module):
 		hidden_pred.append(nn.Linear(input_size, 256))
 		hidden_pred.append(nn.ReLU())
 		hidden_pred.append(nn.Linear(256, output_size))
+		hidden_pred.append(nn.ReLU())
 		return hidden_pred
+
+	def spline_to_point(self, input_size, output_size):
+		a = []
+		a.append(nn.Linear(input_size, 512))
+		a.append(nn.ReLU())
+		a.append(nn.Linear(512, output_size))
+		a.append(nn.ReLU())
+		return a
 
 
 	def forward(self, imgs, n_lines):
@@ -115,6 +127,7 @@ class Multi_Vary_Line_Model_v1(nn.Module):
 			line_prob_output[:, idx, :] = line_stop_p
 
 			## Predict control point position ans stop prob.
+			# spline_features = self.spline_rep(spline_features)
 			point_hidden = self.init_hidden_point(batch_size)
 			for id_p in range(config.max_point):
 				point_features, point_hidden = self.point_gru(spline_features.unsqueeze(0), point_hidden)

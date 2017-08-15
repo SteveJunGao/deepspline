@@ -172,6 +172,6 @@ def test(epoch):
 
 
 
-for epoch in range(1, config.max_epoch):
+for epoch in range(16, config.max_epoch):
 	train(epoch)
 	test(epoch)

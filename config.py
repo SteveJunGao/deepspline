@@ -19,22 +19,22 @@ reader_verbose = False
 manual_seed = 1
 train_part = 0.7
 train_batch_size = 32
-continue_train = False
-continue_model_name = './multi_spline_cc_pretrain_VGG_more_data_sigmoid/chkt_1'
+continue_train = True
+continue_model_name = './multi_spline_cc_pretrain_VGG_more_data_attention_large_map_continue/chkt_15'
 lr = 1e-4
 weight_decay = 1e-4
 max_epoch = 100
 fix_pretrained = False
-checkpoint_path = './multi_spline_cc_pretrain_VGG_more_data_no_attention'
+checkpoint_path = './multi_spline_cc_pretrain_VGG_more_data_attention_large_map_continue'
 log_file_path = './log/'
-log_file_name = 'multi_spline_cc_pretrain_VGG_more_data_no_attention'
+log_file_name = 'multi_spline_cc_pretrain_VGG_more_data_attention_large_map_continue'
 debugging = False
 clf_weight = 0.1
 fix_img_feature = False
 
 # Used for testing & visualiztion
 test_batch_size = 50
-check_epoch = 42
+check_epoch = 33
 check_save_path = checkpoint_path + '/plot_predict_result'
 check_save_input_path = checkpoint_path + '/plot_input'
 
