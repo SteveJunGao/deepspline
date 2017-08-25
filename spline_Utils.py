@@ -1,7 +1,7 @@
 import os
 import ctypes as c
 import matplotlib
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 # import matplotlib.pyplot as plt
 import numpy as np
@@ -98,7 +98,7 @@ def plot_attention(input, attention_map, pos_pred, pos_target, n_pred_line, save
 	input_img.imshow(input, origin='lower')
 	input_img.set_title('Input Image')
 	subplt_t = plt.subplot(245)
-	subplot_spline_control_point(subplt_t, [pos_target[i].reshape(config.max_point, config.n_dim) for i in range(n_pred_line)])
+	subplot_spline_control_point(subplt_t, [pos_target[i] for i in range(n_pred_line)])
 	subplt_t.set_title('Target Image')
 	# print(attention_map.shape)
 	att_0 = attention_map[0]
@@ -106,7 +106,7 @@ def plot_attention(input, attention_map, pos_pred, pos_target, n_pred_line, save
 	att_0_img.imshow(att_0, origin='lower')
 
 	subplt_0 = plt.subplot(246)
-	subplot_spline_control_point(subplt_0, [pos_pred[0].reshape(config.max_point, config.n_dim)], label_list=['Predict'])
+	subplot_spline_control_point(subplt_0, [pos_pred[0]], label_list=['Predict'])
 	att_0_img.set_title('Attention Map 1')
 	subplt_0.set_title('Predict Spline 1')
 	if n_pred_line > 1:
@@ -114,7 +114,7 @@ def plot_attention(input, attention_map, pos_pred, pos_target, n_pred_line, save
 		att_1_img = plt.subplot(243)
 		att_1_img.imshow(att_1, origin='lower')
 		subplt_1 = plt.subplot(247)
-		subplot_spline_control_point(subplt_1, [pos_pred[1].reshape(config.max_point, config.n_dim)], label_list=['Predict'])
+		subplot_spline_control_point(subplt_1, [pos_pred[1]], label_list=['Predict'])
 		att_1_img.set_title('Attention Map 2')
 		subplt_1.set_title('Predict Spline 2')
 	if n_pred_line > 2:
@@ -122,7 +122,7 @@ def plot_attention(input, attention_map, pos_pred, pos_target, n_pred_line, save
 		att_2_img = plt.subplot(244)
 		att_2_img.imshow(att_2, origin='lower')
 		subplt_2 = plt.subplot(248)
-		subplot_spline_control_point(subplt_2, [pos_pred[2].reshape(config.max_point, config.n_dim)], label_list=['Predict'])
+		subplot_spline_control_point(subplt_2, [pos_pred[2]], label_list=['Predict'])
 		att_2_img.set_title('Attention Map 3')
 		subplt_2.set_title('Predict Spline 3')
 
@@ -187,6 +187,7 @@ def plot_Spline_Curve_Control_Point_Multi_Set(control_points_target, control_poi
 	line_list = []
 	fig_t = plt.subplot(121)
 	fig_t.axis([0, x_size, 0, y_size])
+	fig_t.set_title('Target')
 	for control_points in control_points_target:
 
 		if give_w is None:
@@ -206,6 +207,7 @@ def plot_Spline_Curve_Control_Point_Multi_Set(control_points_target, control_poi
 	line_list = []
 	fig_p = plt.subplot(122)
 	fig_p.axis([0, x_size, 0, y_size])
+	fig_p.set_title('Prediction')
 	for control_points in control_points_pred:
 
 		if give_w is None:
