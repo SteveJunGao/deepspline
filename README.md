@@ -18,6 +18,16 @@ reconstructing spline curves and surfaces based on input images or point clouds.
 
 
 
+If you use this code, please cite our paper:
+
+    @article{gao2019deepspline,
+    title={Deepspline: Data-driven reconstruction of parametric curves and surfaces},
+    author={Gao, Jun and Tang, Chengcheng and Ganapathi-Subramanian, Vignesh and Huang, Jiahui and Su, Hao and Guibas, Leonidas J},
+    journal={arXiv preprint arXiv:1901.03781},
+    year={2019}
+    }
+    
+
 # News
 Due to many code requires of this paper, we release an initial version of the code. We are still working on cleaning the code base. 
 
