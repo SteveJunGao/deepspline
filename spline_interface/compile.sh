@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
 #rm -rd build
-#mkdir build
+mkdir build
 cd build
 cmake ..
 if make -j10; then
