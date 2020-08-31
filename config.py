@@ -19,10 +19,10 @@ reader_verbose = False
 manual_seed = 1
 train_part = 0.7
 train_batch_size = 32
-continue_train = True
+continue_train = False
 continue_model_name = './multi_spline_cc_pretrain_VGG_more_data_attention_large_map_continue/chkt_15'
-lr = 1e-4
-weight_decay = 1e-4
+lr = 1e-6
+weight_decay = 1e-6
 max_epoch = 100
 fix_pretrained = False
 checkpoint_path = './multi_spline_cc_pretrain_VGG_more_data_attention_large_map_continue'
@@ -41,6 +41,3 @@ check_save_input_path = checkpoint_path + '/plot_input'
 # Used for code checking
 check_num = 1000
 save_check_path = './plot_check'
-
-
-
